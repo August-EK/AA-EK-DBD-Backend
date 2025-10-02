@@ -7,12 +7,12 @@ INSERT INTO stadiums (id, name, capacity, address, city, country, opened_year) V
 (5, 'Etihad Stadium', 53400, 'Rowsley Street', 'Manchester', 'England', 2002);
 
 -- Insert clubs (single set, no duplicates)
-INSERT INTO clubs (id, name, founded_year, country, city, current_stadium_id, uefa_coefficient) VALUES
-(1, 'Manchester United', 1878, 'England', 'Manchester', 1, 85.5),
-(2, 'Arsenal', 1886, 'England', 'London', 2, 78.2),
-(3, 'Liverpool', 1892, 'England', 'Liverpool', 3, 92.1),
-(4, 'Chelsea', 1905, 'England', 'London', 4, 81.3),
-(5, 'Manchester City', 1880, 'England', 'Manchester', 5, 89.7);
+INSERT INTO clubs (id, name, short_name, founded_year, country, city, current_stadium_id) VALUES
+(1, 'Manchester United', 'MUFC', 1878, 'England', 'Manchester', 1),
+(2, 'Arsenal', 'AFC', 1886, 'England', 'London', 2),
+(3, 'Liverpool', 'LFC', 1892, 'England', 'Liverpool', 3),
+(4, 'Chelsea', 'CFC', 1905, 'England', 'London', 4),
+(5, 'Manchester City', 'MCFC', 1880, 'England', 'Manchester', 5);
 
 -- Insert positions
 INSERT INTO positions (id, code, name) VALUES
@@ -26,6 +26,26 @@ INSERT INTO positions (id, code, name) VALUES
 (8, 'LW', 'Left Winger'),
 (9, 'RW', 'Right Winger'),
 (10, 'ST', 'Striker');
+
+-- Insert sample players (OPDATERET med current_club_id)
+INSERT INTO players (id, name, date_of_birth, nationality, height_cm, preferred_foot, current_club_id) VALUES
+                                                                                                           (1, 'Bruno Fernandes', '1994-09-08', 'Portugal', 179, 'RIGHT', 1),  -- Manchester United
+                                                                                                           (2, 'Mohamed Salah', '1992-06-15', 'Egypt', 175, 'LEFT', 3),        -- Liverpool
+                                                                                                           (3, 'Bukayo Saka', '2001-09-05', 'England', 178, 'LEFT', 2),        -- Arsenal
+                                                                                                           (4, 'Erling Haaland', '2000-07-21', 'Norway', 194, 'LEFT', 5),      -- Manchester City
+                                                                                                           (5, 'Thiago Silva', '1984-09-22', 'Brazil', 181, 'RIGHT', 4);       -- Chelsea
+
+-- Insert player positions (eksempel)
+INSERT INTO player_positions (id, player_id, position_id, is_primary) VALUES
+(1, 1, 7, true),   -- Bruno Fernandes -> Attacking Midfielder (primary)
+(2, 1, 6, false),  -- Bruno Fernandes -> Central Midfielder (secondary)
+(3, 2, 9, true),   -- Mohamed Salah -> Right Winger (primary)
+(4, 2, 10, false), -- Mohamed Salah -> Striker (secondary)
+(5, 3, 8, true),   -- Bukayo Saka -> Left Winger (primary)
+(6, 3, 9, false),  -- Bukayo Saka -> Right Winger (secondary)
+(7, 4, 10, true),  -- Erling Haaland -> Striker (primary)
+(8, 5, 2, true);   -- Thiago Silva -> Centre-back (primary)
+
 
 -- Insert referees
 INSERT INTO referees (id, name, nationality) VALUES
@@ -49,18 +69,13 @@ INSERT INTO seasons (id, label, start_date, end_date) VALUES
 (2, '2024/25', '2024-08-17', '2025-05-25'),
 (3, '2022/23', '2022-08-06', '2023-05-28');
 
--- Insert sample players
-INSERT INTO players (id, name, date_of_birth, nationality, height_cm, preferred_foot) VALUES
-(1, 'Bruno Fernandes', '1994-09-08', 'Portugal', 179, 'RIGHT'),
-(2, 'Mohamed Salah', '1992-06-15', 'Egypt', 175, 'LEFT'),
-(3, 'Bukayo Saka', '2001-09-05', 'England', 178, 'LEFT'),
-(4, 'Erling Haaland', '2000-07-21', 'Norway', 194, 'LEFT'),
-(5, 'Thiago Silva', '1984-09-22', 'Brazil', 181, 'RIGHT');
+
+
 
 -- Insert coaches
-INSERT INTO coaches (id, name, date_of_birth, nationality, licence) VALUES
-(1, 'Erik ten Hag', '1970-02-02', 'Netherlands', 'UEFA Pro'),
-(2, 'Mikel Arteta', '1982-03-26', 'Spain', 'UEFA Pro'),
-(3, 'Jürgen Klopp', '1967-06-16', 'Germany', 'UEFA Pro'),
-(4, 'Mauricio Pochettino', '1972-03-02', 'Argentina', 'UEFA Pro'),
-(5, 'Pep Guardiola', '1971-01-18', 'Spain', 'UEFA Pro');
+INSERT INTO coaches (id, name, date_of_birth, nationality, licence, current_club_id) VALUES
+(1, 'Erik ten Hag', '1970-02-02', 'Netherlands', 'UEFA Pro', 1),      -- Manchester United
+(2, 'Mikel Arteta', '1982-03-26', 'Spain', 'UEFA Pro', 2),            -- Arsenal
+(3, 'Jürgen Klopp', '1967-06-16', 'Germany', 'UEFA Pro', 3),          -- Liverpool
+(4, 'Mauricio Pochettino', '1972-03-02', 'Argentina', 'UEFA Pro', 4), -- Chelsea
+(5, 'Pep Guardiola', '1971-01-18', 'Spain', 'UEFA Pro', 5);           -- Manchester City

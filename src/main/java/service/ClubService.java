@@ -44,10 +44,10 @@ public class ClubService {
         Club club = clubRepository.findById(id);
         if (club != null) {
             club.name = updatedClub.name;
+            club.shortName = updatedClub.shortName;
             club.country = updatedClub.country;
             club.city = updatedClub.city;
             club.foundedYear = updatedClub.foundedYear;
-            club.uefaCoefficient = updatedClub.uefaCoefficient;
             club.currentStadium = updatedClub.currentStadium;
         }
         return club;

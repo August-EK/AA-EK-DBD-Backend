@@ -7,7 +7,6 @@ import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
 import jakarta.persistence.*;
-import java.time.LocalDate;
 
 @Entity
 @Table(name = "player_positions")
@@ -25,9 +24,6 @@ public class PlayerPosition extends PanacheEntity {
     @JoinColumn(name = "position_id", nullable = false)
     public Position position;
 
-    @Column(name = "start_date")
-    public LocalDate startDate;
-
-    @Column(name = "end_date")
-    public LocalDate endDate;
+    @Column(name = "is_primary", nullable = false)
+    public Boolean isPrimary = false;
 }
