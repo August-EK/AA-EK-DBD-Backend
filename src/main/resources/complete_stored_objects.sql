@@ -1,321 +1,346 @@
 -- =====================================================
--- COMPLETE DATABASE OBJECTS FOR ASSIGNMENT 1
--- Stored Procedures, Functions, Views, Triggers, Events
+-- COMPLETE STORED OBJECTS FOR ASSIGNMENT 1
+-- Functions, Procedures, Triggers, Audit
+-- Only for the 11 implemented entities
 -- =====================================================
 
 -- =====================================================
 -- FUNCTIONS (Assignment Requirement)
 -- =====================================================
 
--- 1. Calculate player age
+-- Function 1: Calculate player age from birth date
 CREATE OR REPLACE FUNCTION calculate_player_age(birth_date DATE)
 RETURNS INTEGER
 LANGUAGE plpgsql
-AS $function$
+AS $$
 BEGIN
     IF birth_date IS NULL THEN
         RETURN NULL;
     END IF;
     RETURN EXTRACT(YEAR FROM AGE(CURRENT_DATE, birth_date));
 END;
-$function$;
+$$;
 
--- 2. Get club points for current season
-CREATE OR REPLACE FUNCTION get_club_current_points(club_name_param TEXT)
+-- Function 2: Get total goals scored by a club in current season
+CREATE OR REPLACE FUNCTION get_club_goals_current_season(club_name_param TEXT)
 RETURNS INTEGER
 LANGUAGE plpgsql
-AS $function$
+AS $$
 DECLARE
-    points_total INTEGER := 0;
+    total_goals INTEGER := 0;
+    home_goals INTEGER := 0;
+    away_goals INTEGER := 0;
 BEGIN
-    SELECT COALESCE(s.points, 0) INTO points_total
-    FROM standings s
-    JOIN clubs c ON s.club_id = c.id
-    JOIN seasons se ON s.season_id = se.id
-    JOIN competitions co ON s.competition_id = co.id
+    -- Goals scored at home
+    SELECT COALESCE(SUM(m.home_goals), 0) INTO home_goals
+    FROM matches m
+    JOIN clubs c ON m.home_club_id = c.id
+    JOIN seasons s ON m.season_id = s.id
     WHERE c.name = club_name_param
-      AND se.label = '2024/25'
-      AND co.name = 'Premier League';
+      AND s.label = '2024/25'
+      AND m.status = 'FINISHED';
 
-    RETURN points_total;
+    -- Goals scored away
+    SELECT COALESCE(SUM(m.away_goals), 0) INTO away_goals
+    FROM matches m
+    JOIN clubs c ON m.away_club_id = c.id
+    JOIN seasons s ON m.season_id = s.id
+    WHERE c.name = club_name_param
+      AND s.label = '2024/25'
+      AND m.status = 'FINISHED';
+
+    total_goals := home_goals + away_goals;
+    RETURN total_goals;
 END;
-$function$;
+$$;
 
--- 3. Calculate transfer market value by position
-CREATE OR REPLACE FUNCTION avg_transfer_fee_by_position(position_code_param TEXT)
-RETURNS DECIMAL(15,2)
+-- Function 3: Calculate win percentage for a club
+CREATE OR REPLACE FUNCTION calculate_club_win_percentage(club_id_param BIGINT)
+RETURNS DECIMAL(5,2)
 LANGUAGE plpgsql
-AS $function$
+AS $$
 DECLARE
-    avg_fee DECIMAL(15,2) := 0;
+    total_matches INTEGER := 0;
+    wins INTEGER := 0;
+    win_pct DECIMAL(5,2) := 0.00;
 BEGIN
-    SELECT COALESCE(AVG(t.fee), 0) INTO avg_fee
-    FROM transfers t
-    JOIN players p ON t.player_id = p.id
-    JOIN player_positions pp ON p.id = pp.player_id
-    JOIN positions pos ON pp.position_id = pos.id
-    WHERE pos.code = position_code_param
-      AND t.fee IS NOT NULL
-      AND t.transfer_date >= CURRENT_DATE - INTERVAL '2 years';
+    -- Count total finished matches
+    SELECT COUNT(*) INTO total_matches
+    FROM matches m
+    WHERE (m.home_club_id = club_id_param OR m.away_club_id = club_id_param)
+      AND m.status = 'FINISHED';
 
-    RETURN avg_fee;
+    IF total_matches = 0 THEN
+        RETURN 0.00;
+    END IF;
+
+    -- Count wins
+    SELECT COUNT(*) INTO wins
+    FROM matches m
+    WHERE ((m.home_club_id = club_id_param AND m.home_goals > m.away_goals)
+        OR (m.away_club_id = club_id_param AND m.away_goals > m.home_goals))
+      AND m.status = 'FINISHED';
+
+    win_pct := (wins::DECIMAL / total_matches::DECIMAL) * 100;
+    RETURN ROUND(win_pct, 2);
 END;
-$function$;
+$$;
 
 -- =====================================================
 -- STORED PROCEDURES (Assignment Requirement)
 -- =====================================================
 
--- 1. Complete match and update standings
-CREATE OR REPLACE FUNCTION complete_match_with_result(
+-- Procedure 1: Complete a match and update result
+CREATE OR REPLACE FUNCTION complete_match(
     match_id_param BIGINT,
     home_goals_param INTEGER,
     away_goals_param INTEGER
 )
 RETURNS TEXT
 LANGUAGE plpgsql
-AS $function$
+AS $$
 DECLARE
-    home_club BIGINT;
-    away_club BIGINT;
-    season_id_var BIGINT;
-    competition_id_var BIGINT;
-    home_points INTEGER := 0;
-    away_points INTEGER := 0;
+    match_exists BOOLEAN;
 BEGIN
-    -- Get match info
-    SELECT home_club_id, away_club_id, season_id, competition_id
-    INTO home_club, away_club, season_id_var, competition_id_var
-    FROM matches
-    WHERE id = match_id_param;
+    -- Check if match exists and is scheduled
+    SELECT EXISTS(
+        SELECT 1 FROM matches
+        WHERE id = match_id_param
+        AND status = 'SCHEDULED'
+    ) INTO match_exists;
 
-    IF home_club IS NULL THEN
-        RETURN 'Match not found';
+    IF NOT match_exists THEN
+        RETURN 'Error: Match not found or already completed';
     END IF;
 
-    -- Update match result
+    -- Validate goals
+    IF home_goals_param < 0 OR away_goals_param < 0 THEN
+        RETURN 'Error: Goals cannot be negative';
+    END IF;
+
+    -- Update match with result
     UPDATE matches
     SET home_goals = home_goals_param,
         away_goals = away_goals_param,
         status = 'FINISHED'
     WHERE id = match_id_param;
 
-    -- Calculate points
-    IF home_goals_param > away_goals_param THEN
-        home_points := 3; away_points := 0;
-    ELSIF home_goals_param < away_goals_param THEN
-        home_points := 0; away_points := 3;
-    ELSE
-        home_points := 1; away_points := 1;
-    END IF;
-
-    -- Update/Insert standings for home team
-    INSERT INTO standings (competition_id, season_id, club_id, played, won, drawn, lost,
-                          goals_for, goals_against, goal_difference, points, last_updated)
-    VALUES (competition_id_var, season_id_var, home_club, 1,
-            CASE WHEN home_goals_param > away_goals_param THEN 1 ELSE 0 END,
-            CASE WHEN home_goals_param = away_goals_param THEN 1 ELSE 0 END,
-            CASE WHEN home_goals_param < away_goals_param THEN 1 ELSE 0 END,
-            home_goals_param, away_goals_param,
-            home_goals_param - away_goals_param, home_points, CURRENT_TIMESTAMP)
-    ON CONFLICT (competition_id, season_id, club_id) DO UPDATE SET
-        played = standings.played + 1,
-        won = standings.won + CASE WHEN home_goals_param > away_goals_param THEN 1 ELSE 0 END,
-        drawn = standings.drawn + CASE WHEN home_goals_param = away_goals_param THEN 1 ELSE 0 END,
-        lost = standings.lost + CASE WHEN home_goals_param < away_goals_param THEN 1 ELSE 0 END,
-        goals_for = standings.goals_for + home_goals_param,
-        goals_against = standings.goals_against + away_goals_param,
-        goal_difference = (standings.goals_for + home_goals_param) - (standings.goals_against + away_goals_param),
-        points = standings.points + home_points,
-        last_updated = CURRENT_TIMESTAMP;
-
-    -- Update/Insert standings for away team
-    INSERT INTO standings (competition_id, season_id, club_id, played, won, drawn, lost,
-                          goals_for, goals_against, goal_difference, points, last_updated)
-    VALUES (competition_id_var, season_id_var, away_club, 1,
-            CASE WHEN away_goals_param > home_goals_param THEN 1 ELSE 0 END,
-            CASE WHEN away_goals_param = home_goals_param THEN 1 ELSE 0 END,
-            CASE WHEN away_goals_param < home_goals_param THEN 1 ELSE 0 END,
-            away_goals_param, home_goals_param,
-            away_goals_param - home_goals_param, away_points, CURRENT_TIMESTAMP)
-    ON CONFLICT (competition_id, season_id, club_id) DO UPDATE SET
-        played = standings.played + 1,
-        won = standings.won + CASE WHEN away_goals_param > home_goals_param THEN 1 ELSE 0 END,
-        drawn = standings.drawn + CASE WHEN away_goals_param = home_goals_param THEN 1 ELSE 0 END,
-        lost = standings.lost + CASE WHEN away_goals_param < home_goals_param THEN 1 ELSE 0 END,
-        goals_for = standings.goals_for + away_goals_param,
-        goals_against = standings.goals_against + home_goals_param,
-        goal_difference = (standings.goals_for + away_goals_param) - (standings.goals_against + home_goals_param),
-        points = standings.points + away_points,
-        last_updated = CURRENT_TIMESTAMP;
-
-    RETURN 'Match completed and standings updated';
+    RETURN FORMAT('Match completed successfully: %s-%s', home_goals_param, away_goals_param);
 END;
-$function$;
+$$;
 
--- 2. Register player transfer
-CREATE OR REPLACE FUNCTION register_player_transfer(
+-- Procedure 2: Transfer player to new club
+CREATE OR REPLACE FUNCTION transfer_player(
     player_id_param BIGINT,
-    from_club_id_param BIGINT,
-    to_club_id_param BIGINT,
-    transfer_fee_param DECIMAL(15,2),
-    transfer_date_param DATE
+    new_club_id_param BIGINT
 )
 RETURNS TEXT
 LANGUAGE plpgsql
-AS $function$
+AS $$
+DECLARE
+    player_name TEXT;
+    old_club_name TEXT;
+    new_club_name TEXT;
 BEGIN
-    -- Insert transfer record
-    INSERT INTO transfers (player_id, from_club_id, to_club_id, fee, currency, transfer_date, type)
-    VALUES (player_id_param, from_club_id_param, to_club_id_param,
-            transfer_fee_param, 'EUR', transfer_date_param, 'PERMANENT');
+    -- Get player and old club info
+    SELECT p.name, c.name INTO player_name, old_club_name
+    FROM players p
+    LEFT JOIN clubs c ON p.current_club_id = c.id
+    WHERE p.id = player_id_param;
 
-    -- End previous contract
-    UPDATE contracts
-    SET end_date = transfer_date_param - INTERVAL '1 day'
-    WHERE player_id = player_id_param
-      AND club_id = from_club_id_param
-      AND end_date > transfer_date_param;
+    IF player_name IS NULL THEN
+        RETURN 'Error: Player not found';
+    END IF;
 
-    RETURN 'Transfer registered successfully';
+    -- Get new club name
+    SELECT name INTO new_club_name
+    FROM clubs
+    WHERE id = new_club_id_param;
+
+    IF new_club_name IS NULL THEN
+        RETURN 'Error: New club not found';
+    END IF;
+
+    -- Update player's current club
+    UPDATE players
+    SET current_club_id = new_club_id_param
+    WHERE id = player_id_param;
+
+    RETURN FORMAT('Transfer completed: %s moved from %s to %s',
+                  player_name,
+                  COALESCE(old_club_name, 'Free Agent'),
+                  new_club_name);
 END;
-$function$;
+$$;
+
+-- Procedure 3: Schedule a new match
+CREATE OR REPLACE FUNCTION schedule_match(
+    competition_id_param BIGINT,
+    season_id_param BIGINT,
+    matchday_round_param INTEGER,
+    match_datetime_param TIMESTAMP,
+    home_club_id_param BIGINT,
+    away_club_id_param BIGINT,
+    stadium_id_param BIGINT,
+    referee_id_param BIGINT
+)
+RETURNS TEXT
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    new_match_id BIGINT;
+BEGIN
+    -- Validate clubs are different
+    IF home_club_id_param = away_club_id_param THEN
+        RETURN 'Error: Home and away clubs must be different';
+    END IF;
+
+    -- Insert new match
+    INSERT INTO matches (
+        competition_id, season_id, matchday_round, match_datetime,
+        home_club_id, away_club_id, stadium_id, referee_id, status
+    ) VALUES (
+        competition_id_param, season_id_param, matchday_round_param, match_datetime_param,
+        home_club_id_param, away_club_id_param, stadium_id_param, referee_id_param, 'SCHEDULED'
+    ) RETURNING id INTO new_match_id;
+
+    RETURN FORMAT('Match scheduled successfully with ID: %s', new_match_id);
+END;
+$$;
 
 -- =====================================================
--- ADVANCED VIEWS (Assignment Requirement)
+-- TRIGGERS & AUDIT (Assignment Requirement)
 -- =====================================================
 
--- Premier League current table
-CREATE OR REPLACE VIEW v_premier_league_table AS
-SELECT
-    ROW_NUMBER() OVER (ORDER BY s.points DESC, s.goal_difference DESC, s.goals_for DESC) as position,
-    c.name as club_name,
-    s.played as P,
-    s.won as W,
-    s.drawn as D,
-    s.lost as L,
-    s.goals_for as GF,
-    s.goals_against as GA,
-    s.goal_difference as GD,
-    s.points as Pts,
-    s.last_updated
-FROM standings s
-JOIN clubs c ON s.club_id = c.id
-JOIN seasons se ON s.season_id = se.id
-JOIN competitions co ON s.competition_id = co.id
-WHERE se.label = '2024/25' AND co.name = 'Premier League'
-ORDER BY s.points DESC, s.goal_difference DESC, s.goals_for DESC;
-
--- Player statistics view
-CREATE OR REPLACE VIEW v_player_season_stats AS
-SELECT
-    p.name as player_name,
-    calculate_player_age(p.date_of_birth) as age,
-    p.nationality,
-    c.name as current_club,
-    COUNT(a.id) as appearances,
-    COUNT(CASE WHEN a.is_starter = true THEN 1 END) as starts,
-    COUNT(CASE WHEN a.is_starter = false THEN 1 END) as substitute_appearances,
-    se.label as season
-FROM players p
-LEFT JOIN appearances a ON p.id = a.player_id
-LEFT JOIN clubs c ON a.club_id = c.id
-LEFT JOIN matches m ON a.match_id = m.id
-LEFT JOIN seasons se ON m.season_id = se.id
-WHERE se.label = '2024/25' OR se.label IS NULL
-GROUP BY p.id, p.name, p.date_of_birth, p.nationality, c.name, se.label
-ORDER BY appearances DESC NULLS LAST;
-
--- Transfer market analysis
-CREATE OR REPLACE VIEW v_transfer_market_summary AS
-SELECT
-    pos.name as position_name,
-    COUNT(*) as total_transfers,
-    AVG(t.fee) as avg_transfer_fee,
-    MAX(t.fee) as highest_transfer_fee,
-    MIN(t.fee) as lowest_transfer_fee
-FROM transfers t
-JOIN players p ON t.player_id = p.id
-JOIN player_positions pp ON p.id = pp.player_id
-JOIN positions pos ON pp.position_id = pos.id
-WHERE t.fee IS NOT NULL
-  AND t.transfer_date >= '2022-01-01'
-GROUP BY pos.id, pos.name
-ORDER BY avg_transfer_fee DESC;
-
--- =====================================================
--- TRIGGERS (Assignment Requirement)
--- =====================================================
-
--- Audit table for transfers
-CREATE TABLE IF NOT EXISTS transfer_audit_log (
+-- Audit table for player transfers
+CREATE TABLE IF NOT EXISTS player_transfer_audit (
     audit_id SERIAL PRIMARY KEY,
-    transfer_id BIGINT,
-    action_type VARCHAR(10),
-    old_fee DECIMAL(15,2),
-    new_fee DECIMAL(15,2),
-    changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    player_id BIGINT NOT NULL,
+    player_name TEXT,
+    old_club_id BIGINT,
+    old_club_name TEXT,
+    new_club_id BIGINT,
+    new_club_name TEXT,
+    transfer_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     changed_by TEXT DEFAULT CURRENT_USER
 );
 
--- Trigger function for transfer auditing
-CREATE OR REPLACE FUNCTION audit_transfer_changes()
+-- Trigger function for player transfer auditing
+CREATE OR REPLACE FUNCTION audit_player_transfer()
 RETURNS TRIGGER
 LANGUAGE plpgsql
-AS $function$
+AS $$
+DECLARE
+    old_club TEXT;
+    new_club TEXT;
 BEGIN
-    IF TG_OP = 'INSERT' THEN
-        INSERT INTO transfer_audit_log (transfer_id, action_type, new_fee)
-        VALUES (NEW.id, 'INSERT', NEW.fee);
-        RETURN NEW;
-    ELSIF TG_OP = 'UPDATE' THEN
-        INSERT INTO transfer_audit_log (transfer_id, action_type, old_fee, new_fee)
-        VALUES (NEW.id, 'UPDATE', OLD.fee, NEW.fee);
-        RETURN NEW;
+    -- Only audit if club actually changed
+    IF OLD.current_club_id IS DISTINCT FROM NEW.current_club_id THEN
+        -- Get old club name
+        SELECT name INTO old_club
+        FROM clubs
+        WHERE id = OLD.current_club_id;
+
+        -- Get new club name
+        SELECT name INTO new_club
+        FROM clubs
+        WHERE id = NEW.current_club_id;
+
+        -- Insert audit record
+        INSERT INTO player_transfer_audit (
+            player_id, player_name,
+            old_club_id, old_club_name,
+            new_club_id, new_club_name
+        ) VALUES (
+            NEW.id, NEW.name,
+            OLD.current_club_id, old_club,
+            NEW.current_club_id, new_club
+        );
     END IF;
-    RETURN NULL;
+
+    RETURN NEW;
 END;
-$function$;
+$$;
 
--- Create the trigger
-DROP TRIGGER IF EXISTS transfer_audit_trigger ON transfers;
-CREATE TRIGGER transfer_audit_trigger
-    AFTER INSERT OR UPDATE ON transfers
+-- Create the trigger on players table
+DROP TRIGGER IF EXISTS player_transfer_audit_trigger ON players;
+CREATE TRIGGER player_transfer_audit_trigger
+    AFTER UPDATE ON players
     FOR EACH ROW
-    EXECUTE FUNCTION audit_transfer_changes();
+    EXECUTE FUNCTION audit_player_transfer();
+
+-- Audit table for match results
+CREATE TABLE IF NOT EXISTS match_result_audit (
+    audit_id SERIAL PRIMARY KEY,
+    match_id BIGINT NOT NULL,
+    home_club TEXT,
+    away_club TEXT,
+    final_score TEXT,
+    completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    completed_by TEXT DEFAULT CURRENT_USER
+);
+
+-- Trigger function for match result auditing
+CREATE OR REPLACE FUNCTION audit_match_result()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    home_club TEXT;
+    away_club TEXT;
+BEGIN
+    -- Only audit when match is completed
+    IF NEW.status = 'FINISHED' AND OLD.status = 'SCHEDULED' THEN
+        -- Get club names
+        SELECT c1.name, c2.name INTO home_club, away_club
+        FROM clubs c1, clubs c2
+        WHERE c1.id = NEW.home_club_id
+        AND c2.id = NEW.away_club_id;
+
+        -- Insert audit record
+        INSERT INTO match_result_audit (
+            match_id, home_club, away_club, final_score
+        ) VALUES (
+            NEW.id,
+            home_club,
+            away_club,
+            FORMAT('%s - %s', NEW.home_goals, NEW.away_goals)
+        );
+    END IF;
+
+    RETURN NEW;
+END;
+$$;
+
+-- Create the trigger on matches table
+DROP TRIGGER IF EXISTS match_result_audit_trigger ON matches;
+CREATE TRIGGER match_result_audit_trigger
+    AFTER UPDATE ON matches
+    FOR EACH ROW
+    EXECUTE FUNCTION audit_match_result();
 
 -- =====================================================
--- INDEXES FOR PERFORMANCE (Assignment Requirement)
+-- TEST QUERIES FOR STORED OBJECTS
 -- =====================================================
 
--- Additional performance indexes
-CREATE INDEX IF NOT EXISTS idx_transfers_fee ON transfers(fee) WHERE fee IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_matches_season_status ON matches(season_id, status);
-CREATE INDEX IF NOT EXISTS idx_appearances_player_season ON appearances(player_id, match_id);
-CREATE INDEX IF NOT EXISTS idx_standings_season_points ON standings(season_id, points DESC);
+-- Test Function 1: Calculate player ages
+-- SELECT name, date_of_birth, calculate_player_age(date_of_birth) as age FROM players ORDER BY age DESC;
 
--- =====================================================
--- TEST DATA FOR STORED OBJECTS
--- =====================================================
+-- Test Function 2: Get club goals
+-- SELECT get_club_goals_current_season('Manchester City') as total_goals;
 
--- Insert some test matches to demonstrate functionality (with explicit IDs)
-INSERT INTO matches (id, competition_id, season_id, matchday_round, match_datetime,
-                    home_club_id, away_club_id, stadium_id, referee_id, status)
-VALUES
-(101, 1, 2, 1, '2024-08-17 15:00:00', 1, 2, 1, 1, 'SCHEDULED'),
-(102, 1, 2, 1, '2024-08-17 17:30:00', 3, 4, 3, 2, 'SCHEDULED'),
-(103, 1, 2, 2, '2024-08-24 15:00:00', 2, 5, 2, 3, 'SCHEDULED')
-ON CONFLICT (id) DO NOTHING;
+-- Test Function 3: Win percentage
+-- SELECT c.name, calculate_club_win_percentage(c.id) as win_percentage FROM clubs c ORDER BY win_percentage DESC;
 
--- Insert some test player positions (with explicit IDs)
-INSERT INTO player_positions (id, player_id, position_id, start_date) VALUES
-(101, 1, 6, '2023-07-01'), -- Bruno Fernandes - CM
-(102, 2, 9, '2022-07-01'), -- Mohamed Salah - RW
-(103, 3, 8, '2021-07-01'), -- Bukayo Saka - LW
-(104, 4, 10, '2022-08-01'), -- Erling Haaland - ST
-(105, 5, 2, '2020-07-01')  -- Thiago Silva - CB
-ON CONFLICT (id) DO NOTHING;
+-- Test Procedure 1: Complete a match
+-- SELECT complete_match(11, 2, 1);
 
--- Update sequences to continue from our manual IDs
-SELECT setval('matches_id_seq', 103);
-SELECT setval('player_positions_id_seq', 105);
+-- Test Procedure 2: Transfer player
+-- SELECT transfer_player(1, 3);  -- Transfer Bruno Fernandes to Liverpool
+
+-- Test Procedure 3: Schedule new match
+-- SELECT schedule_match(1, 3, 4, '2024-09-14 15:00:00', 1, 5, 1, 1);
+
+-- View audit logs
+-- SELECT * FROM player_transfer_audit ORDER BY transfer_date DESC;
+-- SELECT * FROM match_result_audit ORDER BY completed_at DESC;
