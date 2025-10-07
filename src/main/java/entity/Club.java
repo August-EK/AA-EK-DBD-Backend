@@ -48,4 +48,8 @@ public class Club extends PanacheEntity {
     @ManyToMany
     @JoinTable(name = "club_competitions")
     public List<Competition> competitions;
+
+    // One-to-One: Club → Coach
+    @OneToOne(mappedBy = "currentClub")
+    public Coach currentCoach;
 }
