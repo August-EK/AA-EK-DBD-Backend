@@ -7,7 +7,6 @@ import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 
 import jakarta.persistence.*;
-import java.math.BigDecimal;
 import java.util.List;
 
 @Entity
@@ -21,6 +20,9 @@ public class Club extends PanacheEntity {
     @Column(nullable = false, length = 100)
     public String name;
 
+    @Column(name = "short_name", nullable = false, length = 20)
+    public String shortName;
+
     @Column(name = "founded_year")
     public Integer foundedYear;
 
@@ -30,35 +32,20 @@ public class Club extends PanacheEntity {
     @Column(nullable = false, length = 50)
     public String city;
 
+    // Many-to-One: Club → Stadium
     @ManyToOne
     @JoinColumn(name = "current_stadium_id")
     public Stadium currentStadium;
 
-    @Column(name = "uefa_coefficient", precision = 8, scale = 3)
-    public BigDecimal uefaCoefficient;
-
-    // One-to-many relationships
-    @OneToMany(mappedBy = "club", fetch = FetchType.LAZY)
-    public List<ClubOwnership> ownerships;
-
-    @OneToMany(mappedBy = "club", fetch = FetchType.LAZY)
-    public List<ClubCoachTenure> coachTenures;
-
-    @OneToMany(mappedBy = "club", fetch = FetchType.LAZY)
-    public List<Contract> contracts;
-
-    @OneToMany(mappedBy = "fromClub", fetch = FetchType.LAZY)
-    public List<Transfer> transfersOut;
-
-    @OneToMany(mappedBy = "toClub", fetch = FetchType.LAZY)
-    public List<Transfer> transfersIn;
-
-    @OneToMany(mappedBy = "homeClub", fetch = FetchType.LAZY)
-    public List<Match> homeMatches;
-
-    @OneToMany(mappedBy = "awayClub", fetch = FetchType.LAZY)
-    public List<Match> awayMatches;
-
+    // One-to-Many: Club → Honours
     @OneToMany(mappedBy = "club", fetch = FetchType.LAZY)
     public List<Honour> honours;
+
+    @OneToMany(mappedBy = "currentClub", fetch = FetchType.LAZY)
+    public List<Player> currentPlayers;
+
+    // Many-to-Many: Club ↔ Competition
+    @ManyToMany
+    @JoinTable(name = "club_competitions")
+    public List<Competition> competitions;
 }

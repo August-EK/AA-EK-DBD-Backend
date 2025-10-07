@@ -40,7 +40,4 @@ public class Stadium extends PanacheEntity {
     @OneToMany(mappedBy = "currentStadium", fetch = FetchType.LAZY)
     public List<Club> clubs;
 
-    // One-to-many relationship with matches
-    @OneToMany(mappedBy = "stadium", fetch = FetchType.LAZY)
-    public List<Match> matches;
 }
