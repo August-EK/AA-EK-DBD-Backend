@@ -28,8 +28,5 @@ public class Season extends PanacheEntity {
     public LocalDate endDate;
 
     @OneToMany(mappedBy = "season", fetch = FetchType.LAZY)
-    public List<Match> matches;
-
-    @OneToMany(mappedBy = "season", fetch = FetchType.LAZY)
     public List<Honour> honours;
 }

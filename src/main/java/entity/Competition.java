@@ -31,10 +31,10 @@ public class Competition extends PanacheEntity {
     public String organizer; // UEFA, FA, Premier League Ltd
 
     @OneToMany(mappedBy = "competition", fetch = FetchType.LAZY)
-    public List<Match> matches;
-
-    @OneToMany(mappedBy = "competition", fetch = FetchType.LAZY)
     public List<Honour> honours;
+
+    @ManyToMany(mappedBy = "competitions")
+    public List<Club> clubs;
 
     public enum CompetitionType {
         LEAGUE,

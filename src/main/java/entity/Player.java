@@ -34,17 +34,14 @@ public class Player extends PanacheEntity {
     @Column(name = "preferred_foot", length = 10)
     public PreferredFoot preferredFoot;
 
+    // ✅ TILFØJ DENNE RELATION:
+    @ManyToOne
+    @JoinColumn(name = "current_club_id")
+    public Club currentClub;
+
+    // ✅ Denne er perfekt som den er:
     @OneToMany(mappedBy = "player", fetch = FetchType.LAZY)
     public List<PlayerPosition> playerPositions;
-
-    @OneToMany(mappedBy = "player", fetch = FetchType.LAZY)
-    public List<Contract> contracts;
-
-    @OneToMany(mappedBy = "player", fetch = FetchType.LAZY)
-    public List<Transfer> transfers;
-
-    @OneToMany(mappedBy = "player", fetch = FetchType.LAZY)
-    public List<Appearance> appearances;
 
     public enum PreferredFoot {
         LEFT, RIGHT, BOTH

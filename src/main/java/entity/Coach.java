@@ -30,6 +30,4 @@ public class Coach extends PanacheEntity {
     @Column(length = 50)
     public String licence;
 
-    @OneToMany(mappedBy = "coach", fetch = FetchType.LAZY)
-    public List<ClubCoachTenure> tenures;
 }
