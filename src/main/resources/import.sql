@@ -32,7 +32,7 @@ INSERT INTO players (id, name, date_of_birth, nationality, height_cm, preferred_
                                                                                                            (1, 'Bruno Fernandes', '1994-09-08', 'Portugal', 179, 'RIGHT', 1),  -- Manchester United
                                                                                                            (2, 'Mohamed Salah', '1992-06-15', 'Egypt', 175, 'LEFT', 3),        -- Liverpool
                                                                                                            (3, 'Bukayo Saka', '2001-09-05', 'England', 178, 'LEFT', 2),        -- Arsenal
-                                                                                                           (4, 'Erling Haaland', '2000-07-21', 'Norway', 194, 'LEFT', 5),      -- Manchester City
+                                                                                                       (4, 'Erling Haaland', '2000-07-21', 'Norway', 194, 'LEFT', 5),      -- Manchester City
                                                                                                            (5, 'Thiago Silva', '1984-09-22', 'Brazil', 181, 'RIGHT', 4);       -- Chelsea
 
 -- Insert player positions (eksempel)
