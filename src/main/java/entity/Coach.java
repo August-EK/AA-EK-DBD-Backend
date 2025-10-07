@@ -8,7 +8,6 @@ import lombok.NoArgsConstructor;
 
 import jakarta.persistence.*;
 import java.time.LocalDate;
-import java.util.List;
 
 @Entity
 @Table(name = "coaches")
@@ -30,4 +29,8 @@ public class Coach extends PanacheEntity {
     @Column(length = 50)
     public String licence;
 
+    // One-to-One: Coach → Club
+    @OneToOne
+    @JoinColumn(name = "current_club_id")
+    public Club currentClub;
 }
